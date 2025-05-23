@@ -4,13 +4,11 @@ FROM node:16
 RUN mkdir /app
 WORKDIR /app
 
-# Add application files
-ADD ./insecure-js/package.json /app/
-ADD ./insecure-js/server.js /app/
-ADD ./insecure-js/init_db.js /app/
-
-# Install dependencies using Yarn
+# Copy package files first for better caching
+COPY package*.json ./
 RUN npm install --legacy-peer-deps
+
+COPY . .
 
 EXPOSE 3000
 

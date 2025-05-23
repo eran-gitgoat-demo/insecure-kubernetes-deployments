@@ -4,6 +4,9 @@ kind: Deployment
 metadata:
   name: {{ .Values.insecureApp.appName }}
   namespace: {{ .Values.insecureApp.namespace }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
 spec:
   replicas: {{ .Values.insecureApp.replicas }}
   selector:
@@ -13,11 +16,15 @@ spec:
     metadata:
       labels:
         app: {{ .Values.insecureApp.appName }}
+      annotations:
+        kubescape.io/max-sniffing-time: "5m"
     spec:
       containers:
       - name: {{ .Values.insecureApp.appName }}
         image: "{{ .Values.insecureApp.image.repository }}:{{ .Values.insecureApp.image.tag }}"
         env:
+        - name: SCRIPT_NAME
+          value: /app
         - name: AWS_ACCESS_KEY_ID
           value: AKIA2JAPX77RGLB664VE
         - name: AWS_SECRET_ACCESS_KEY
@@ -27,17 +34,25 @@ spec:
         volumeMounts:                   
         - name: docker-socket
           mountPath: /var/run/docker.sock
+        - name: data
+          mountPath: /data
       volumes:                         
       - name: docker-socket
         hostPath:
           path: /var/run/docker.sock
+      - name: data
+        persistentVolumeClaim:
+          claimName: insecure-app-data
       serviceAccountName: insecure-app-sa
 ---
 kind: Service
 apiVersion: v1
 metadata:
   name: insecure-app
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ .Values.insecureApp.namespace }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
 spec:
   type: NodePort
   selector:
@@ -54,6 +69,9 @@ kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: insecure-app-role
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
 rules:
 - apiGroups: [""]
   resources: ["pods", "serviceaccounts", "serviceaccounts/token"]
@@ -63,10 +81,13 @@ kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: insecure-app-role-binding
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
 subjects:
 - kind: ServiceAccount
   name: insecure-app-sa
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ .Values.insecureApp.namespace }}
   apiGroup: ""
 roleRef:
   kind: ClusterRole
@@ -77,4 +98,33 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: insecure-app-sa
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ .Values.insecureApp.namespace }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: insecure-app-ingress
+  namespace: insecure-app
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    meta.helm.sh/release-name: {{ .Release.Name }}
+    meta.helm.sh/release-namespace: {{ .Release.Namespace }}
+spec:
+  ingressClassName: nginx
+  rules:
+  - http:
+      paths:
+      - path: /app/?(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: insecure-app
+            port:
+              number: 8080

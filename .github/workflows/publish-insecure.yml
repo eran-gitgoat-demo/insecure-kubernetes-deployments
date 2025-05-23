@@ -31,6 +31,14 @@ jobs:
             image: confusedcrib/workload-security-evaluator
             context: ./workload-security-evaluator
             dockerfile: ./workload-security-evaluator/Dockerfile
+          - name: insecure-api
+            image: confusedcrib/insecure-api
+            context: ./insecure-api
+            dockerfile: ./insecure-api/Dockerfile
+          - name: insecure-ai
+            image: confusedcrib/insecure-ai
+            context: ./insecure-ai
+            dockerfile: ./insecure-ai/Dockerfile
 
     steps:
       - name: Check out the repo
@@ -47,6 +55,10 @@ jobs:
         uses: docker/metadata-action@v4
         with:
           images: ${{ matrix.image-data.image }}
+          tags: |
+            type=raw,value=latest
+            type=schedule,pattern=nightly
+            type=semver,pattern={{version}}
       
       - name: Build and push ${{ matrix.image-data.name }} Docker image
         uses: docker/build-push-action@v4
